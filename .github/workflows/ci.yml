@@ -1,5 +1,5 @@
 
-name: CI - Test Flask Application
+name: CI - Test and Build Docker Image
 
 on:
   push:
@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Run Application Tests
+  test-and-build:
+    name: Test App and Build Image
     runs-on: ubuntu-latest
 
     steps:
@@ -36,3 +36,13 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: aws-containerized-cicd:ci
