@@ -1,5 +1,5 @@
 
-name: CI - Test and Build Docker Image
+name: CI - Build and Push Docker Image
 
 on:
   push:
@@ -11,10 +11,11 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   test-and-build:
-    name: Test App and Build Image
+    name: Test, Build and Publish
     runs-on: ubuntu-latest
 
     steps:
@@ -40,9 +41,32 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      # Pull requests build the image but do not access AWS.
+      - name: Build Docker image for pull request
+        if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
           tags: aws-containerized-cicd:ci
+
+      # Only pushes to main can assume the AWS role.
+      - name: Configure AWS credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image to ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
